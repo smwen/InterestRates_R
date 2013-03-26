@@ -1,0 +1,184 @@
+Title
+========================================================
+
+Data Preprocessing
+-------------------------
+
+### Retrieve the data
+```{r}
+setwd("~/Documents/Sandy/DA_HW1/code")
+loansData <- read.csv("../data/loansData.csv")
+```
+
+### Data Cleaning
+####Convert columns to numeric class, when applicable.
+```{r}
+loansData$Interest.Rate <- as.numeric(sub("%", "", loansData$Interest.Rate))
+loansData$Debt.To.Income.Ratio <- as.numeric(sub("%", "", loansData$Debt.To.Income.Ratio))
+loansData$Amount.Requested <- as.numeric(loansData$Amount.Requested)
+loansData$Amount.Funded.By.Investors <- as.numeric(loansData$Amount.Funded.By.Investors)
+loansData$Monthly.Income <- as.numeric(loansData$Monthly.Income)
+loansData$Open.CREDIT.Lines <- as.numeric(loansData$Open.CREDIT.Lines)
+loansData$Revolving.CREDIT.Balance <- as.numeric(loansData$Revolving.CREDIT.Balance)
+loansData$Inquiries.in.the.Last.6.Months<- as.numeric(loansData$Inquiries.in.the.Last.6.Months)
+loansData$Monthly.Income.log10 <- log10(as.numeric(loansData$Monthly.Income))
+```
+
+####Remove rows containing NAs.
+```{r}
+table(is.na(loansData))
+loansData <- loansData[complete.cases(loansData),]
+nrow(loansData) ## removed 2 cases
+```
+
+#### split FICO Range into min/max
+```{r}
+loansData$FICO.Range.min <- as.numeric(gsub("-(.*)","",loansData$FICO.Range))
+loansData$FICO.Range.max <- as.numeric(gsub("(.*)-","",loansData$FICO.Range))
+loansData$FICO.Range.mid <- (loansData$FICO.Range.max+loansData$FICO.Range.min)/2
+```
+#### convert loan length into numeric
+```{r}
+loansData$Loan.Length.months <- as.numeric(gsub(" months","",loansData$Loan.Length))
+```
+#### convert Employment Length to numeric
+Assign 0 to <1 year, 10 to 10+ years
+```{r}
+loansData$Employment.Length.num <- gsub("< 1 year","0",loansData$Employment.Length)
+loansData$Employment.Length.num <- gsub(" year(.*)","",loansData$Employment.Length.num)
+loansData$Employment.Length.num <- gsub("n/a","",loansData$Employment.Length.num)
+loansData$Employment.Length.num <- as.numeric(gsub("\\+","",loansData$Employment.Length.num))
+```
+#### convert some factor columns into numeric
+```{r}
+loansData$State.num <- as.numeric(loansData$State)
+loansData$Loan.Purpose.num <- as.numeric(loansData$Loan.Purpose)
+loansData$Home.Ownership.num <- as.numeric(loansData$Home.Ownership)
+```
+#### Check loansData table
+
+```{r}
+head(loansData)
+names(loansData)
+table(is.na(loansData)) # 77 NAs
+summary(loansData)
+```
+ requested amounts are between 1000-35000. 
+
+WHy is there a -0.01 min value for amount funded?
+Interest rates range from 5.42 to 24.89
+2 loan lengths: 36 months, 60 months
+Debt to Income Ratio ranges from 0 to 34.91
+FICO ranges from 640 to 834
+
+#### Find missing values, check ranges
+table(complete.cases(loansData))
+
+Exploratory Analysis
+-------------------------
+### Check Interest rate vs FICO
+```{r}
+plot(jitter(loansData$FICO.Range.mid),
+     jitter(loansData$Interest.Rate), col="blue", pch=19, cex=0.5)
+smoothScatter((loansData$FICO.Range.min+loansData$FICO.Range.max)/2,loansData$Interest.Rate)
+# plot shows decrease in interest rates when FICO score increases
+boxplot(Interest.Rate ~ FICO.Range, data=loansData)
+```
+### try alternate colorings based on Loan.purpose, home.ownership, etc.
+see if anything significant about home ownership
+```{r}
+plot(jitter((loansData$FICO.Range.min+loansData$FICO.Range.max)/2),
+     jitter(loansData$Interest.Rate), col=as.numeric(loansData$Home.Ownership), pch=19, cex=0.4)
+legend("topright", legend=unique(loansData$Home.Ownership), 
+       col=unique(as.numeric(loansData$Home.Ownership)), pch=19)
+plot(density(loansData$FICO.Range.mid), lwd=3, col="red")
+```
+
+#### Check FICO-related parameters
+FICO scores are calculated using revolving credit balance, inquiries in the last 12 months (not 6),
+open credit lines
+```{r}
+plot(jitter(loansData$FICO.Range.min),jitter(loansData$Inquiries.in.the.Last.6.Months), col="blue", pch=19, cex=0.5)
+```
+
+### Loan Length
+As of this writing, Lending Club only allows 36-month terms for loans of $1000-$15,975,
+so naturally larger loan lengths will tend to be for higher amounts.
+```{r}
+plot(jitter(loansData$FICO.Range.min),jitter(loansData$Amount.Requested), col=as.numeric(loansData$Loan.Length), pch=19, cex=0.5)
+legend("topright", legend=unique(loansData$Loan.Length), col=unique(as.numeric(loansData$Loan.Length)), pch=19, cex=0.9)
+plot(jitter(loansData$Amount.Requested), jitter(loansData$Interest.Rate), col=loansData$Employment.Length.num, pch=19, cex=0.5)
+plot(jitter(loansData$FICO.Range.min), jitter(loansData$Debt.To.Income.Ratio), col="blue", pch=19, cex=0.5)
+```
+Slight relationship --> higher FICO scores, more likely to have higher Debt-to-income ratio
+
+### Correlations
+#### Check Interest Rates
+```{r}
+loansDataCor <- cor(loansData[,c(1,2,3,19,22,6,21,23,9,18,11,12,13)])
+loansDataCor
+```
+Correlation indicates the following vars are highly correlated with Interest Rate:
+FICO.Range.mid(-0.7092), Loan.Length.months(0.4235), Amount.Funded.By.Investors(0.336),
+Amount.Requested(0.331)
+As expected, state does not correlate well with FICO score (not in FICO score)
+Best vars are
+Debt.To.Income.Ratio(-0.2169), Home.Ownership.num (-0.156), Monthly.Income(0.122)
+Oddly, Inquiries in the last 6 months is low
+
+Modeling
+-------------------------
+### Start with basic linear regression model, using FICO score only
+```{r}
+palette(rainbow(14))
+loansDataLm1 <- lm(Interest.Rate ~ FICO.Range.mid, data=loansData)
+summary(loansDataLm1)
+par(mfrow=c(1,2))
+plot(loansData$Interest.Rate, loansDataLm1$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+legend("bottomright",legend=unique(loansData$Loan.Purpose),col=as.numeric(unique(loansData$Loan.Purpose)),pch=19, cex=0.6)
+plot(loansDataLm1$fitted.values, loansDataLm1$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+```
+### add in Loan Lengths
+should probably make it into the factor version
+```{r}
+loansDataLm2 <- lm(Interest.Rate ~ FICO.Range.mid + Amount.Requested + as.factor(Loan.Length), data=loansData)
+summary(loansDataLm2)
+par(mfrow=c(1,2))
+plot(loansData$Interest.Rate, loansDataLm2$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+plot(loansDataLm2$fitted.values, loansDataLm2$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+```
+
+### add in Inquiries instead
+Slightly better, R changed by 0.01
+```{r}
+loansDataLm3 <- lm(Interest.Rate ~ FICO.Range.mid + Amount.Requested + as.factor(Loan.Length)  + Inquiries.in.the.Last.6.Months, data=loansData)
+summary(loansDataLm3)
+par(mfrow=c(1,2))
+plot(loansData$Interest.Rate, loansDataLm3$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+plot(loansDataLm3$fitted.values, loansDataLm3$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+par(mfrow=c(1,1))
+plot(loansDataLm3,which=2)
+confint(loansDataLm3)
+```
+
+### Check confounding
+```{r}
+confoundlm <- lm(Amount.Requested ~ as.factor(Loan.Length), data=loansData)
+summary(confoundlm)
+```
+
+### Retry using FICO range as factor
+with confounder, adjusted R-squared: of 0.796
+```{r}
+loansDataLm4 <- lm(Interest.Rate ~ as.factor(FICO.Range) + Amount.Requested + as.factor(Loan.Length) + Inquiries.in.the.Last.6.Months, data=loansData)
+summary(loansDataLm4)
+par(mfrow=c(1,2))
+plot(loansData$Interest.Rate, loansDataLm4$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+plot(loansDataLm4$fitted.values, loansDataLm4$residuals, col=as.numeric(loansData$Loan.Purpose), pch=19, cex=0.5)
+# P value is >0.001 but <0.01, so not sure if OK
+par(mfrow=c(1,1))
+plot(loansDataLm4,which=2)
+```
+
+Final Plots
+------------
